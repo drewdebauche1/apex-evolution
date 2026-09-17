@@ -1,0 +1,15 @@
+# Local training/debug output
+test-output*.txt
+debug*.mjs
+tmp_*.mjs
+track7-diagnostic.json
+track7-improved-trace.json
+track7-line-comparison.png
+
+# Local Python/runtime clutter
+__pycache__/
+.venv/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
