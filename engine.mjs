@@ -1,5 +1,6 @@
-export const ENGINE_VERSION='1.1';
+export const ENGINE_VERSION='1.3';
 export const DT=1/60, POP=50, WIDTH=70, MAX_SPEED=170, ACCELERATION=260, BRAKING=340;
+export const SECTOR_COUNT=3;
 export const WHEELBASE=20, MAX_STEER=1.0, STEER_RATE=6.5, LATERAL_GRIP=300;
 export const TRACK_LIMIT=WIDTH/2-6;
 export const USE_ROAD_POLYGON=false;
@@ -7,7 +8,29 @@ export const DEFAULT_TRACK=[[100,440],[240,440],[360,390],[385,255],[300,145],[4
 export const STRAIGHT=[[100,270],[960,270]];
 export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export const angle=v=>Math.atan2(Math.sin(v),Math.cos(v));
-export function makeTrack(points){let length=0;const segments=[];for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<1)continue;segments.push({a,b,len,start:length});length+=len;}const corners=[],lineStations=[{s:0},{s:length}];
+// Sample the rounded centerline once; rendering and road checks use these exact points.
+export function roundedTrackPoints(points,cornerRadius=0){
+ const source=points.filter((p,i)=>!i||Math.hypot(p[0]-points[i-1][0],p[1]-points[i-1][1])>1e-9);
+ if(source.length<3||cornerRadius<=0)return source.map(p=>[...p]);
+ const result=[[...source[0]]];
+ for(let i=1;i<source.length-1;i++){
+  const a=source[i-1],b=source[i],c=source[i+1];
+  const ab=Math.hypot(b[0]-a[0],b[1]-a[1]),bc=Math.hypot(c[0]-b[0],c[1]-b[1]);
+  const trim=Math.min(cornerRadius,ab*.45,bc*.45);
+  const entry=b.map((v,j)=>v+(a[j]-v)*trim/ab),exit=b.map((v,j)=>v+(c[j]-v)*trim/bc);
+  result.push(entry);
+  // Quadratic chord error is at most 0.1 px, including tight reversing bends.
+  const curvature=Math.hypot(entry[0]-2*b[0]+exit[0],entry[1]-2*b[1]+exit[1]);
+  const steps=Math.max(2,Math.ceil(Math.sqrt(curvature/.4)));
+  for(let j=1;j<=steps;j++){
+   const t=j/steps,u=1-t;
+   result.push([u*u*entry[0]+2*u*t*b[0]+t*t*exit[0],u*u*entry[1]+2*u*t*b[1]+t*t*exit[1]]);
+  }
+ }
+ result.push([...source.at(-1)]);
+ return result;
+}
+export function makeTrack(points,cornerRadius=0){points=roundedTrackPoints(points,cornerRadius);let length=0;const segments=[];for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<1e-9)continue;segments.push({a,b,len,start:length});length+=len;}const corners=[],lineStations=[{s:0},{s:length}];
 
 for(let i=1;i<segments.length;i++){const prev=segments[i-1],next=segments[i],corner=next.start;const bend=angle(Math.atan2(next.b[1]-next.a[1],next.b[0]-next.a[0])-Math.atan2(prev.b[1]-prev.a[1],prev.b[0]-prev.a[0])),direction=Math.sign(bend);if(Math.abs(bend)>.05)corners.push({s:corner,bend:Math.abs(bend),direction});lineStations.push({s:corner-prev.len*.35,direction,phase:-1},{s:corner,direction,phase:1},{s:corner+next.len*.35,direction,phase:-1});}
 lineStations.sort((a,b)=>a.s-b.s);
@@ -130,7 +153,7 @@ function guideTarget(track,guide,genes,s){
  const p=at(guide,s);
  return{x:p.x,y:p.y};
 }
-export function spawn(track,genes,id=0){const p=at(track,0);return{id,guide:racingGuide(track),guideProgress:0,genes:normalizeGenes(track,genes),x:p.x,y:p.y,heading:p.heading,speed:0,steer:0,time:0,progress:0,alive:true,finished:false,trace:[[p.x,p.y,p.heading]],ticks:0};}
+export function spawn(track,genes,id=0){const p=at(track,0);return{id,guide:racingGuide(track),guideProgress:0,genes:normalizeGenes(track,genes),x:p.x,y:p.y,heading:p.heading,speed:0,steer:0,time:0,progress:0,sectorTimes:[],nextSector:1,alive:true,finished:false,trace:[[p.x,p.y,p.heading]],ticks:0};}
 export function finishCrossing(track,from,to,progress){const end=track.segments.at(-1),dx=(end.b[0]-end.a[0])/end.len,dy=(end.b[1]-end.a[1])/end.len;const before=(from.x-end.b[0])*dx+(from.y-end.b[1])*dy,after=(to.x-end.b[0])*dx+(to.y-end.b[1])*dy;if(before>0||after<0||after<=before||progress<end.start)return null;const fraction=-before/(after-before),x=from.x+(to.x-from.x)*fraction,y=from.y+(to.y-from.y)*fraction,lateral=-(x-end.b[0])*dy+(y-end.b[1])*dx;return Math.abs(lateral)<=TRACK_LIMIT?{fraction,x,y}:null;}
 // Drive with a sane target speed on the actual track, and use the guide route only as a soft steering aid.
 export function aiControls(a,t,speedLimit=MAX_SPEED){
@@ -207,7 +230,8 @@ return{turn:clamp(steering/MAX_STEER,-1,1),throttle:clamp(delta/40,-1,1)};
 export function step(a,t,manual,speedLimit=MAX_SPEED){if(!a.alive)return;speedLimit=Number.isFinite(speedLimit)?clamp(speedLimit,25,300):MAX_SPEED;a.speedMin=a.time===0?speedLimit:Math.min(a.speedMin??MAX_SPEED,speedLimit);a.speedMax=a.time===0?speedLimit:Math.max(a.speedMax??MAX_SPEED,speedLimit);
 const {turn,throttle}=manual||aiControls(a,t,speedLimit);
 const previous={x:a.x,y:a.y,heading:a.heading};
-a.speed=clamp(a.speed+clamp(throttle,-1,1)*(throttle>0?ACCELERATION:BRAKING)*DT-2*DT,0,speedLimit);
+const inputThrottle=clamp(throttle,-1,1),coastDrag=inputThrottle===0?135:2;
+a.speed=clamp(a.speed+inputThrottle*(inputThrottle>0?ACCELERATION:BRAKING)*DT-coastDrag*DT,0,speedLimit);
 // Rate-limited road-wheel angle, bicycle geometry, and a grip limit: no rotation at rest.
 const desiredSteer=clamp(turn,-1,1)*MAX_STEER;
 a// faster steering rate at speed (keeps baseline at low speed)
@@ -259,7 +283,8 @@ if(t.openArea){
 	const route=nearest(t,a.x,a.y,a.progress+WIDTH+a.speed*DT);
 	a.progress=Math.max(a.progress,route.s);
 }
-const crossing=t.openArea?null:finishCrossing(t,previous,a,a.progress);if(crossing){a.x=crossing.x;a.y=crossing.y;a.heading=previous.heading+angle(a.heading-previous.heading)*crossing.fraction;a.time-=DT*(1-crossing.fraction);a.progress=t.length;a.finished=true;a.alive=false;a.stopReason='finished';a.trace.push([a.x,a.y,a.heading]);return;}
+while(!t.openArea&&a.nextSector<SECTOR_COUNT&&a.progress>=t.length*a.nextSector/SECTOR_COUNT){a.sectorTimes.push(a.time);a.nextSector++;}
+const crossing=t.openArea?null:finishCrossing(t,previous,a,a.progress);if(crossing){a.x=crossing.x;a.y=crossing.y;a.heading=previous.heading+angle(a.heading-previous.heading)*crossing.fraction;a.time-=DT*(1-crossing.fraction);a.progress=t.length;while(a.nextSector<=SECTOR_COUNT){a.sectorTimes.push(a.time);a.nextSector++;}a.finished=true;a.alive=false;a.stopReason='finished';a.trace.push([a.x,a.y,a.heading]);return;}
 if(a.ticks%3===0)a.trace.push([a.x,a.y,a.heading]);if(!t.openArea&&n.distance>TRACK_LIMIT){a.alive=false;a.stopReason='off-track';}else if(!t.openArea&&a.time>t.length/20+15){a.alive=false;a.stopReason='timeout';}}
 
 export const fitness=(a,t)=>a.finished?2+t.length/(MAX_SPEED*Math.max(a.time,.01)):a.progress/t.length;

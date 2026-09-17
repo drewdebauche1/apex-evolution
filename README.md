@@ -1,6 +1,6 @@
 # Apex Evolution
 
-Version 1.0.0 of the local browser game.
+Version 1.3 of the local browser game.
 
 Apex Evolution is a small AI racing lab: draw or select a track, train 50 racers at a time, and watch evolution search for the fastest legal route from start to finish.
 
@@ -39,7 +39,7 @@ AI drivers use the same physics. They search the drivable road surface for the s
 
 Existing tracks and saved drivers remain available. Previously recorded champion times and replays are retained and may reflect the older physics. Use **Reset this course** if you want a fresh comparison under the updated handling.
 
-Run the physics checks with `node --test engine.test.mjs` (Node.js required only for testing).
+Run the physics checks with `node --test app.test.mjs engine.test.mjs` (Node.js required only for testing).
 
 ## Add more tracks
 
@@ -52,6 +52,13 @@ Tracks, trained drivers, and champions use browser localStorage under `apex-evol
 ## Editing
 
 Edit the files and refresh the browser. This download is independent of the hosted website; local edits do not update the online game. The archive excludes hosting credentials, Git history, and deployment configuration.
+
+## Version 1.3
+
+- Rounded track rendering and collision checks use the same geometry
+- Corner-radius edits save correctly, preserve zero, and cancel without changing the track
+- Sector timing and personal-best comparisons
+- Stronger deceleration when coasting
 
 ## Version 1.0.0
 

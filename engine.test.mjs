@@ -1,13 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,randomGenes,breed,nearest} from './engine.mjs';
+import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,TRACK_LIMIT,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,randomGenes,breed,nearest,at} from './engine.mjs';
 
 const genes=[70,2,1,1,0];
 const rightAngle=[[100,400],[500,400],[500,100],[900,100]];
 const hairpin=[[100,400],[800,400],[600,280],[100,280]];
 // Approximately the user's screenshot: two very tight, overlapping switchbacks.
 const switchbacks=[[100,270],[960,270],[300,170],[580,100],[860,100]];
+
+test('rounded road collision checks follow the visible curve instead of the sharp corner',()=>{
+  const points=[[100,400],[500,400],[500,100]],track=makeTrack(points,120),sharp=makeTrack(points);
+  for(const [x,y,inside] of [[470,370,true],[515,415,false]]){
+    assert.equal(nearest(track,x,y).distance<=TRACK_LIMIT,inside);
+    assert.equal(nearest(sharp,x,y).distance<=TRACK_LIMIT,!inside);
+    const car=spawn(track,genes);car.x=x;car.y=y;
+    step(car,track,{turn:0,throttle:0});
+    assert.equal(car.alive,inside);
+  }
+  assert.deepEqual(track.points[0],points[0]);
+  assert.deepEqual(track.points.at(-1),points.at(-1));
+  assert.equal(at(track,0).heading,0);
+  assert.equal(at(track,track.length).heading,-Math.PI/2);
+});
+
+test('rounded centerline stays within 0.1 px of the quadratic shown in the editor',()=>{
+  for(const radius of [0,1,52,120]){
+    const points=[[100,400],[500,400],[500,100]],track=makeTrack(points,radius);
+    for(let i=0;i<=100;i++){
+      const t=i/100,u=1-t;
+      const x=u*u*(500-radius)+2*u*t*500+t*t*500;
+      const y=u*u*400+2*u*t*400+t*t*(400-radius);
+      assert.ok(nearest(track,x,y).distance<=.101);
+    }
+    if(radius===0)assert.deepEqual(track.points,points);
+    assert.deepEqual(makeTrack(STRAIGHT,radius).points,STRAIGHT);
+  }
+});
+
+test('AI completes rounded courses using the same road geometry as manual driving',()=>{
+  for(const points of [DEFAULT_TRACK,rightAngle,[[150,190],[480,100],[760,330]]]){
+    const track=makeTrack(points,52),car=spawn(track,genes);
+    for(let tick=0;tick<15000&&car.alive;tick++)step(car,track,undefined,125);
+    assert.ok(car.finished,`Rounded course ${JSON.stringify(points)}: ${car.stopReason}`);
+  }
+});
 
 test('full braking stops from cruising and maximum speed quickly',()=>{
   for(const speed of [125,300]){
