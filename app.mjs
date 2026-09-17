@@ -1,5 +1,6 @@
-import{ENGINE_VERSION,DT,POP,WIDTH,TRACK_LIMIT,DEFAULT_TRACK,STRAIGHT,makeTrack,at,spawn,step,breed,randomGenes,angle,clamp}from'./engine.mjs?v=1.0.0';
+import{ENGINE_VERSION,DT,POP,WIDTH,TRACK_LIMIT,DEFAULT_TRACK,STRAIGHT,makeTrack,at,spawn,step,breed,randomGenes,angle,clamp}from'./engine.mjs?v=1.1';
 const $=id=>document.getElementById(id),canvas=$('race'),ctx=canvas.getContext('2d'),colors=['#c7fa64','#67c4ff','#f5a36d','#c294ff','#ff718c'];
+const versionLabel=document.createElement('span');versionLabel.className='version-label';versionLabel.textContent='v'+ENGINE_VERSION;document.querySelector('footer').append(versionLabel);
 let custom=DEFAULT_TRACK.map(p=>[...p]),track=makeTrack(custom),agents=[],generation=1,history=[],champion=null,running=false,mode='training',editing=false,draft=[],visible=[],replaying=false,replayTime=0,manual=null,keys=new Set(),last=0,accumulator=0,lastUI=0,simTime=0,carSpeed=125,activeTrack=2,tracks={},saveTimer,openArea=false,cornerRadius=52;
 function notify(s){$('notice').textContent=s;clearTimeout(saveTimer);saveTimer=setTimeout(()=>$('notice').textContent='',4500);}
 function validPoints(p){return Array.isArray(p)&&p.length>=2&&p.length<=24&&p.every(v=>Array.isArray(v)&&v.length===2&&v.every(Number.isFinite))&&makeTrack(p).length>=300;}

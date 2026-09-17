@@ -1,4 +1,4 @@
-export const ENGINE_VERSION='1.0.0';
+export const ENGINE_VERSION='1.1';
 export const DT=1/60, POP=50, WIDTH=70, MAX_SPEED=170, ACCELERATION=260, BRAKING=340;
 export const WHEELBASE=20, MAX_STEER=1.0, STEER_RATE=6.5, LATERAL_GRIP=300;
 export const TRACK_LIMIT=WIDTH/2-6;
@@ -221,6 +221,10 @@ if(t.openArea){
 	if(a.y<35)a.y=505;else if(a.y>505)a.y=35;
 }
 let n=t.openArea?{distance:0,s:0}:nearest(t,a.x,a.y);// Nearby return lanes are valid road, but are not necessarily the next route segment.
+if(manual&&!t.openArea&&n.distance>TRACK_LIMIT){
+	a.x=previous.x;a.y=previous.y;a.heading=previous.heading;a.speed=0;a.alive=false;a.stopReason='off-track';
+	return;
+}
 // Small numerical drift can push the car fractionally past the TRACK_LIMIT.
 // Nudge it back onto the road when it's only slightly over the limit.
 // Increase tolerance slightly to recover marginal overshoots observed in probes.
