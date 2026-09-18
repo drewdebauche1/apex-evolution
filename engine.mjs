@@ -1,4 +1,4 @@
-export const ENGINE_VERSION='1.4';
+export const ENGINE_VERSION='1.5';
 export const DT=1/60, POP=50, WIDTH=70, MAX_SPEED=170, ACCELERATION=260, BRAKING=340;
 export const SECTOR_COUNT=3;
 export const WHEELBASE=20, MAX_STEER=1.0, STEER_RATE=6.5, LATERAL_GRIP=300;
@@ -95,9 +95,9 @@ export function nearest(track,x,y,maxProgress=Infinity){let best={distance:Infin
 // Chromosomes are the weights and biases of a 10 -> 8 -> 2 tanh network.
 // This seed was calibrated in the deterministic physics simulation so evolution
 // starts with basic driving ability instead of waiting to discover forward motion.
-const BASELINE_NETWORK=[2.069775,-.198216,.055962,.087583,-.095877,.073432,-.114099,-.155642,-.12455,-.043738,-.050089,.123888,2.224874,.023793,-.075149,.232311,.008745,.058528,-.009685,-.167753,-.06635,-.093043,-.116369,-.022197,1.971408,.154552,-.065139,-.170434,.034073,.100768,.121801,.029611,-.071064,.054048,.024982,-.043503,1.533519,.206817,-.137329,.200267,-.009421,.230484,-.094134,-.182553,-.076892,-.049555,.073302,.066048,2.029333,-.158923,-.113553,.040568,.177715,-.099256,-.955496,.046985,-.138052,-.213207,.039411,-.062235,-.044038,.030557,.090839,1.966856,-.031079,-1.16765,.021194,.024693,.160223,.076474,-.069384,1.633191,-.1255,.046214,.151981,.040755,.196619,.078839,-.054103,.07727,-.053317,.080602,-.024293,.029106,.135026,.021742,2.102491,.17412,1.407219,.59148,.080059,-.423349,.169065,.013025,-.230041,.022523,.161604,.098566,.016472,-.005956,-.10389,-2.27572,2.081612,.065006,-.480911,.185327];
+const BASELINE_NETWORK=[1.96802,-.144813,.072497,-.083746,.158929,.052281,-.400864,-.263397,-.26015,-.041421,.093451,.0984,2.174528,.004958,-.055846,.049019,.206053,-.146768,.055307,-.119055,-.219563,-.032343,-.238886,-.029904,2.073209,.326183,-.084364,-.056221,-.039405,.284763,-.150723,-.036483,-.24809,-.023801,.082687,-.135267,1.489409,.152491,-.175398,.305742,-.189974,.298602,-.103238,-.192397,-.075191,.240389,.096786,.139153,1.771027,-.061119,-.070328,.067831,.120227,-.057611,-1.004728,.080129,-.29173,-.278473,.287033,-.250261,-.058102,.180032,-.059444,2.016713,-.064671,-1.374878,.007639,-.083196,.337073,.093551,.002638,1.508722,-.021935,.092614,.05587,-.025569,.216258,-.140154,.099711,.070779,.107415,.160228,-.024498,.231388,.239731,.235701,2.230086,.150046,1.410917,.822173,-.356735,-.311874,-.002521,-.231219,-.158582,.142629,.203876,-.006175,.034301,.069311,-.146511,-2.433429,1.870852,-.172632,-.308743,.319456];
 export function baselineNetwork(){return BASELINE_NETWORK.slice();}
-export function randomGenes(rng=Math.random){const base=baselineNetwork();return base.map(v=>v+(rng()+rng()+rng()+rng()-2)*.18);}
+export function randomGenes(rng=Math.random){const base=baselineNetwork();return base.map(v=>v+(rng()+rng()+rng()+rng()-2)*.06);}
 export function normalizeGenes(_track,genes){
  if(Array.isArray(genes)&&genes.length===NN_WEIGHTS&&genes.every(Number.isFinite))return genes.slice();
  // Version 1.3 populations used short hand-tuned parameter arrays. Migrating
@@ -213,27 +213,6 @@ let n=t.openArea?{distance:0,s:0}:nearest(t,a.x,a.y);// Nearby return lanes are 
 if(manual&&!t.openArea&&n.distance>TRACK_LIMIT){
 	a.x=previous.x;a.y=previous.y;a.heading=previous.heading;a.speed=0;a.alive=false;a.stopReason='off-track';
 	return;
-}
-// Small numerical drift can push the car fractionally past the TRACK_LIMIT.
-// Nudge it back onto the road when it's only slightly over the limit.
-// Increase tolerance slightly to recover marginal overshoots observed in probes.
-if(t.road && t.road.polygon){
-	const d = distanceToPolygonBoundary(a.x,a.y,t.road.polygon);
-	if(d<0 && d>=-3.0){
-		const p=at(t,n.s);
-		const vx=a.x-p.x,vy=a.y-p.y,vd=Math.hypot(vx,vy)||1;const targetDist=TRACK_LIMIT-0.01;
-		a.x=p.x+vx/vd*targetDist; a.y=p.y+vy/vd*targetDist; n=nearest(t,a.x,a.y);
-	}
-}else{
-	if(n.distance>TRACK_LIMIT && n.distance<=TRACK_LIMIT+3.0){
-		const p=at(t,n.s);
-		const vx=a.x-p.x,vy=a.y-p.y,vd=Math.hypot(vx,vy)||1;
-		const targetDist=TRACK_LIMIT-0.01;
-		a.x=p.x+vx/vd*targetDist;
-		a.y=p.y+vy/vd*targetDist;
-		// refresh nearest after the nudge
-		n=nearest(t,a.x,a.y);
-	}
 }
 // Search for the nearest reachable projection instead of rejecting the global winner.
 if(t.openArea){

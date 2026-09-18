@@ -1,6 +1,6 @@
 # Apex Evolution
 
-Version 1.4 of the local browser game.
+Version 1.5 of the local browser game.
 
 Apex Evolution is a small neural-network racing lab: draw or select a track, train 50 racers at a time, and watch neuroevolution search for the fastest legal route from start to finish.
 
@@ -54,6 +54,11 @@ Tracks, trained drivers, and champions use browser localStorage under `apex-evol
 ## Editing
 
 Edit the files and refresh the browser. This download is independent of the hosted website; local edits do not update the online game. The archive excludes hosting credentials, Git history, and deployment configuration.
+
+## Version 1.5
+
+- AI and manual driving now use the same strict track-boundary rule; tiny AI wall-riding corrections were removed
+- Recalibrated neural baseline and safer initial population variation
 
 ## Version 1.4
 
