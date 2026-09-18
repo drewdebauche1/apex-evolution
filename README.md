@@ -1,6 +1,6 @@
 # Apex Evolution
 
-Version 1.5 of the local browser game.
+Version 1.6 of the local browser game.
 
 Apex Evolution is a small neural-network racing lab: draw or select a track, train 50 racers at a time, and watch neuroevolution search for the fastest legal route from start to finish.
 
@@ -29,7 +29,9 @@ No npm installation, build step, API key, or external service is required.
 
 50 neural-network racers train per generation; five randomly selected racers are shown. AI and manual driving share the selected numbered track. Press W or Up to start a manual run. Car speed is adjustable from 25 to 300 px/s while running.
 
-Each racer has a feed-forward neural network with 10 sensor inputs, 8 hidden neurons, and 2 outputs that directly control steering and throttle. The 106 weights and biases are trained with a genetic algorithm: three elites survive, offspring inherit and mutate successful networks, and five new networks maintain diversity. This is neuroevolution rather than backpropagation-based reinforcement learning.
+Each racer has a feed-forward neural network with 15 sensor inputs, 8 hidden neurons, and 2 outputs that directly control steering and throttle. Inputs include five forward-facing road-edge sensors alongside path direction, lane position, speed, steering, and corner information. The 146 weights and biases are trained with a genetic algorithm: three elites survive, offspring inherit and mutate successful networks, and five new networks maintain diversity. This is neuroevolution rather than backpropagation-based reinforcement learning.
+
+Each generation evaluates its networks over three runs: one standard start and two small randomized position and heading variations. Only racers that finish all three runs count as generation finishers. Fitness still prioritizes finishing and speed, with smaller rewards for road clearance and smooth steering. The selected speed is locked for the full generation; slider changes apply to the next generation.
 
 The yellow boundary is the limit for the car's white center dot. A forward crossing of the usable finish line stops the timer. The champion path and replay are recorded locally.
 
@@ -54,6 +56,15 @@ Tracks, trained drivers, and champions use browser localStorage under `apex-evol
 ## Editing
 
 Edit the files and refresh the browser. This download is independent of the hosted website; local edits do not update the online game. The archive excludes hosting credentials, Git history, and deployment configuration.
+
+## Version 1.6
+
+- Added five road-edge distance sensors and expanded the neural policy to 15 → 8 → 2
+- Evaluate every network over three slightly varied runs for more robust learning
+- Reward road clearance and smooth control while keeping finishes and speed dominant
+- Adapt mutation strength when the leading networks become too similar
+- Lock car speed for a complete generation so fitness comparisons remain fair
+- Automatically migrate version 1.4/1.5 neural-network saves to the expanded topology
 
 ## Version 1.5
 

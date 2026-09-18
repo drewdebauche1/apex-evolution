@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,TRACK_LIMIT,NN_INPUTS,NN_HIDDEN,NN_WEIGHTS,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,neuralInputs,runNetwork,baselineNetwork,randomGenes,breed,nearest,at} from './engine.mjs';
+import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,TRACK_LIMIT,LEGACY_NN_WEIGHTS,NN_INPUTS,NN_HIDDEN,NN_WEIGHTS,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,neuralInputs,roadSensors,runNetwork,baselineNetwork,randomGenes,trialFitness,breed,nearest,at} from './engine.mjs';
 
 const genes=baselineNetwork();
 const rightAngle=[[100,400],[500,400],[500,100],[900,100]];
@@ -9,9 +9,9 @@ const hairpin=[[100,400],[800,400],[600,280],[100,280]];
 // Approximately the user's screenshot: two very tight, overlapping switchbacks.
 const switchbacks=[[100,270],[960,270],[300,170],[580,100],[860,100]];
 
-test('the driving policy is a 10-input, 8-hidden, 2-output neural network',()=>{
+test('the driving policy is a 15-input, 8-hidden, 2-output neural network',()=>{
   const weights=baselineNetwork(),track=makeTrack(STRAIGHT),car=spawn(track,weights);
-  assert.equal(NN_INPUTS,10);
+  assert.equal(NN_INPUTS,15);
   assert.equal(NN_HIDDEN,8);
   assert.equal(weights.length,NN_WEIGHTS);
   assert.equal(neuralInputs(car,track).length,NN_INPUTS);
@@ -30,9 +30,23 @@ test('neural output biases directly control steering and throttle',()=>{
 });
 
 test('legacy driving parameters migrate to finite neural weights',()=>{
-  const car=spawn(makeTrack(STRAIGHT),[70,2,1,1,0]);
-  assert.equal(car.genes.length,NN_WEIGHTS);
-  assert.ok(car.genes.every(Number.isFinite));
+  for(const legacy of [[70,2,1,1,0],new Array(LEGACY_NN_WEIGHTS).fill(.25)]){
+    const car=spawn(makeTrack(STRAIGHT),legacy);
+    assert.equal(car.genes.length,NN_WEIGHTS);
+    assert.ok(car.genes.every(Number.isFinite));
+  }
+});
+
+test('road sensors report open space ahead and nearby side boundaries',()=>{
+  const sensors=roadSensors(makeTrack(STRAIGHT),300,270,0);
+  assert.equal(sensors.length,5);
+  assert.equal(sensors[2],1);
+  assert.ok(sensors[0]<.5&&sensors[4]<.5);
+});
+
+test('fitness rewards clearance and smooth control after race outcome',()=>{
+  const track=makeTrack(STRAIGHT),safe={finished:true,time:10,clearanceTotal:80,clearanceSamples:100,steeringChange:1,ticks:100},risky={...safe,clearanceTotal:10,steeringChange:8};
+  assert.ok(trialFitness(safe,track)>trialFitness(risky,track));
 });
 
 test('rounded road collision checks follow the visible curve instead of the sharp corner',()=>{

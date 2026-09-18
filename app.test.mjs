@@ -45,3 +45,19 @@ test('canvas road, saved radius, editor preview and cancellation share consisten
  assert.equal(ui.run('cornerRadius'),0);
  assert.equal(JSON.stringify(ui.road()),ui.run('JSON.stringify(custom)'));
 });
+
+test('a generation evaluates each network across three perturbed rollouts',()=>{
+ const ui=app(),finish=()=>ui.run('agents.forEach((a,i)=>{a.alive=false;a.finished=true;a.time=10+i/100;a.progress=track.length;});finishGeneration()');
+ finish();assert.equal(ui.run('evaluationRound'),2);assert.equal(ui.run('generation'),1);
+ finish();assert.equal(ui.run('evaluationRound'),3);assert.equal(ui.run('generation'),1);
+ finish();assert.equal(ui.run('evaluationRound'),1);assert.equal(ui.run('generation'),2);
+ assert.equal(ui.run('history.at(-1).count'),50);
+});
+
+test('training speed is locked after a generation starts',()=>{
+ const ui=app(),speed=ui.get('carSpeed');
+ speed.value='300';speed.oninput();assert.equal(ui.run('generationSpeed'),300);
+ ui.run('running=true;simTime=1');speed.value='25';speed.oninput();
+ assert.equal(ui.run('carSpeed'),25);
+ assert.equal(ui.run('generationSpeed'),300);
+});
