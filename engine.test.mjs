@@ -1,13 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,TRACK_LIMIT,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,randomGenes,breed,nearest,at} from './engine.mjs';
+import {DT,MAX_STEER,STEER_RATE,LATERAL_GRIP,TRACK_LIMIT,NN_INPUTS,NN_HIDDEN,NN_WEIGHTS,STRAIGHT,DEFAULT_TRACK,makeTrack,spawn,step,aiControls,neuralInputs,runNetwork,baselineNetwork,randomGenes,breed,nearest,at} from './engine.mjs';
 
-const genes=[70,2,1,1,0];
+const genes=baselineNetwork();
 const rightAngle=[[100,400],[500,400],[500,100],[900,100]];
 const hairpin=[[100,400],[800,400],[600,280],[100,280]];
 // Approximately the user's screenshot: two very tight, overlapping switchbacks.
 const switchbacks=[[100,270],[960,270],[300,170],[580,100],[860,100]];
+
+test('the driving policy is a 10-input, 8-hidden, 2-output neural network',()=>{
+  const weights=baselineNetwork(),track=makeTrack(STRAIGHT),car=spawn(track,weights);
+  assert.equal(NN_INPUTS,10);
+  assert.equal(NN_HIDDEN,8);
+  assert.equal(weights.length,NN_WEIGHTS);
+  assert.equal(neuralInputs(car,track).length,NN_INPUTS);
+  assert.equal(runNetwork(weights,neuralInputs(car,track)).length,2);
+  assert.throws(()=>runNetwork(weights,[0]),/shape/);
+});
+
+test('neural output biases directly control steering and throttle',()=>{
+  const weights=new Array(NN_WEIGHTS).fill(0),inputs=new Array(NN_INPUTS).fill(0);
+  const outputStart=NN_HIDDEN*(NN_INPUTS+1),outputStride=NN_HIDDEN+1;
+  weights[outputStart+NN_HIDDEN]=1;
+  weights[outputStart+outputStride+NN_HIDDEN]=-1;
+  const [turn,throttle]=runNetwork(weights,inputs);
+  assert.equal(turn,Math.tanh(1));
+  assert.equal(throttle,Math.tanh(-1));
+});
+
+test('legacy driving parameters migrate to finite neural weights',()=>{
+  const car=spawn(makeTrack(STRAIGHT),[70,2,1,1,0]);
+  assert.equal(car.genes.length,NN_WEIGHTS);
+  assert.ok(car.genes.every(Number.isFinite));
+});
 
 test('rounded road collision checks follow the visible curve instead of the sharp corner',()=>{
   const points=[[100,400],[500,400],[500,100]],track=makeTrack(points,120),sharp=makeTrack(points);
@@ -76,8 +102,8 @@ test('high-speed turning stays within the lateral grip limit',()=>{
   assert.ok(Math.abs(car.heading)/DT<=LATERAL_GRIP/car.speed+1e-10);
 });
 
-test('AI brakes before a sharp corner even with the least cautious brake gene',()=>{
-  const track=makeTrack(rightAngle),car=spawn(track,[70,2,1,0,0]);
+test('the baseline neural policy brakes before a sharp corner',()=>{
+  const track=makeTrack(rightAngle),car=spawn(track,genes);
   car.progress=220;
   car.x=320;
   car.speed=300;
@@ -99,7 +125,7 @@ test('a target behind the car commands a tight turn instead of unwinding steerin
   const track=makeTrack(STRAIGHT),car=spawn(track,genes);
   car.x=200;
   car.y=275;
-  assert.equal(aiControls(car,track).turn,-1);
+  assert.ok(aiControls(car,track).turn<-.95);
 });
 
 test('most seeded drivers complete the screenshot-style switchbacks',()=>{

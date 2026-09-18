@@ -1,8 +1,8 @@
 # Apex Evolution
 
-Version 1.3 of the local browser game.
+Version 1.4 of the local browser game.
 
-Apex Evolution is a small AI racing lab: draw or select a track, train 50 racers at a time, and watch evolution search for the fastest legal route from start to finish.
+Apex Evolution is a small neural-network racing lab: draw or select a track, train 50 racers at a time, and watch neuroevolution search for the fastest legal route from start to finish.
 
 ## Run on Windows
 
@@ -22,12 +22,14 @@ No npm installation, build step, API key, or external service is required.
 - index.html: page structure and controls
 - style.css: appearance and responsive layout
 - app.mjs: interface, rendering, keyboard controls, track slots, saves, and training loop
-- engine.mjs: car physics, track geometry, finish detection, and evolutionary learning
+- engine.mjs: car physics, track geometry, neural-network inference, and neuroevolution
 - serve.py: local-only development server (Python standard library)
 
 ## Current Behavior
 
-50 AI racers per generation; five randomly selected racers shown. AI and manual driving share the selected numbered track. Press W or Up to start a manual run. Car speed is adjustable from 25 to 300 px/s while running. The AI evolves driving controls and per-corner entry/apex/exit offsets. Three elites survive; offspring explore changes and five new drivers maintain diversity. This is evolutionary policy search, not a neural-network RL implementation.
+50 neural-network racers train per generation; five randomly selected racers are shown. AI and manual driving share the selected numbered track. Press W or Up to start a manual run. Car speed is adjustable from 25 to 300 px/s while running.
+
+Each racer has a feed-forward neural network with 10 sensor inputs, 8 hidden neurons, and 2 outputs that directly control steering and throttle. The 106 weights and biases are trained with a genetic algorithm: three elites survive, offspring inherit and mutate successful networks, and five new networks maintain diversity. This is neuroevolution rather than backpropagation-based reinforcement learning.
 
 The yellow boundary is the limit for the car's white center dot. A forward crossing of the usable finish line stops the timer. The champion path and replay are recorded locally.
 
@@ -37,7 +39,7 @@ Down arrow or S applies the brakes. Braking is stronger than acceleration: from 
 
 AI drivers use the same physics. They search the drivable road surface for the shortest legal guide route from the start to the finish, then brake for the guide route's corners instead of blindly honoring every center-line bend. Boundary and finish checks still use the actual road and finish line. If a shortcut is legal but too sharp to hold at speed, braking and steering limits decide whether the car can make it. Finishing quickly remains the reward; touching every drawn corner earns no extra points.
 
-Existing tracks and saved drivers remain available. Previously recorded champion times and replays are retained and may reflect the older physics. Use **Reset this course** if you want a fresh comparison under the updated handling.
+Existing tracks, results, and champion replays remain available. Version 1.3 driving parameters are automatically converted to a valid baseline neural network when loaded. Previously recorded champion times and replays may reflect the older controller. Use **Reset this course** if you want a fresh comparison.
 
 Run the physics checks with `node --test app.test.mjs engine.test.mjs` (Node.js required only for testing).
 
@@ -52,6 +54,12 @@ Tracks, trained drivers, and champions use browser localStorage under `apex-evol
 ## Editing
 
 Edit the files and refresh the browser. This download is independent of the hosted website; local edits do not update the online game. The archive excludes hosting credentials, Git history, and deployment configuration.
+
+## Version 1.4
+
+- Replaced the hand-tuned driving policy with a 10 → 8 → 2 feed-forward neural network
+- Neural-network weights and biases evolve locally across generations
+- Existing saved tracks and champion replays remain compatible
 
 ## Version 1.3
 
