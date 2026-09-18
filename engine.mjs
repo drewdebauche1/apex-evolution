@@ -1,7 +1,9 @@
-export const ENGINE_VERSION='1.3';
+export const ENGINE_VERSION='1.4';
 export const DT=1/60, POP=50, WIDTH=70, MAX_SPEED=170, ACCELERATION=260, BRAKING=340;
 export const SECTOR_COUNT=3;
 export const WHEELBASE=20, MAX_STEER=1.0, STEER_RATE=6.5, LATERAL_GRIP=300;
+export const NN_INPUTS=10, NN_HIDDEN=8, NN_OUTPUTS=2;
+export const NN_WEIGHTS=NN_HIDDEN*(NN_INPUTS+1)+NN_OUTPUTS*(NN_HIDDEN+1);
 export const TRACK_LIMIT=WIDTH/2-6;
 export const USE_ROAD_POLYGON=false;
 export const DEFAULT_TRACK=[[100,440],[240,440],[360,390],[385,255],[300,145],[420,90],[610,115],[720,230],[680,360],[800,450],[925,410],[950,230]];
@@ -90,15 +92,32 @@ export function pointInPolygon(x,y,poly){let inside=false;for(let i=0,j=poly.len
 export function distanceToPolygonBoundary(x,y,poly){let best=Infinity;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];const dx=b[0]-a[0],dy=b[1]-a[1];const t=clamp(((x-a[0])*dx+(y-a[1])*dy)/(dx*dx+dy*dy),0,1);const px=a[0]+t*dx, py=a[1]+t*dy;best=Math.min(best,Math.hypot(x-px,y-py));}return pointInPolygon(x,y,poly)?best:-best;}
 export function at(track,s){s=clamp(s,0,track.length);const seg=track.segments.find(q=>q.start+q.len>=s)||track.segments.at(-1);const t=(s-seg.start)/seg.len;return{x:seg.a[0]+(seg.b[0]-seg.a[0])*t,y:seg.a[1]+(seg.b[1]-seg.a[1])*t,heading:Math.atan2(seg.b[1]-seg.a[1],seg.b[0]-seg.a[0])};}
 export function nearest(track,x,y,maxProgress=Infinity){let best={distance:Infinity,s:0};for(const q of track.segments){const dx=q.b[0]-q.a[0],dy=q.b[1]-q.a[1],t=clamp(((x-q.a[0])*dx+(y-q.a[1])*dy)/(q.len*q.len),0,1);if(q.start+t*q.len>maxProgress)continue;const d=Math.hypot(x-q.a[0]-t*dx,y-q.a[1]-t*dy);if(d<best.distance)best={distance:d,s:q.start+t*q.len};}return best;}
-export function randomGenes(rng=Math.random,track){const base=[20+rng()*100,.8+rng()*4,.2+rng()*.8,rng()*1.8,rng()*30-15];if(!track)return base;const centered=rng()<.5,guided=rng()<.5;return base.concat(track.lineStations.slice(1,-1).map(st=>centered?0:guided?clamp(st.direction*st.phase*(8+rng()*14)+(rng()-.5)*10,-24,24):(rng()-.5)*48));}
-export function normalizeGenes(track,genes){const count=5+track.lineStations.length-2;return Array.from({length:count},(_,i)=>Number.isFinite(genes[i])?genes[i]:0);}
-// Smoothly interpolate independently evolved entry, apex, and exit offsets.
-export function racingOffset(track,genes,s){const stations=track.lineStations;s=clamp(s,0,track.length);let i=1;while(i<stations.length-1&&stations[i].s<s)i++;const left=stations[i-1],right=stations[i];const a=i===1?0:genes[5+i-2]||0,b=i===stations.length-1?0:genes[5+i-1]||0;const u=clamp((s-left.s)/Math.max(1,right.s-left.s),0,1),v=u*u*(3-2*u);return a+(b-a)*v;}
-export function drivingTarget(track,genes,s){const p=at(track,s),before=at(track,s-12),after=at(track,s+12),heading=Math.atan2(after.y-before.y,after.x-before.x);let total=clamp((genes[4]||0)+racingOffset(track,genes,s),-24,24);
-// Near a reversing bend, reserve space for the car's minimum turning radius.
-// Blend into a modest outside offset on entry/exit instead of arbitrary evolved extremes.
-for(const corner of track.corners){if(corner.bend<=2.5)continue;const blend=clamp((150-Math.abs(s-corner.s))/80,0,1);total=total*(1-blend)-corner.direction*16*blend;}
-return{x:p.x-Math.sin(heading)*total,y:p.y+Math.cos(heading)*total};}
+// Chromosomes are the weights and biases of a 10 -> 8 -> 2 tanh network.
+// This seed was calibrated in the deterministic physics simulation so evolution
+// starts with basic driving ability instead of waiting to discover forward motion.
+const BASELINE_NETWORK=[2.069775,-.198216,.055962,.087583,-.095877,.073432,-.114099,-.155642,-.12455,-.043738,-.050089,.123888,2.224874,.023793,-.075149,.232311,.008745,.058528,-.009685,-.167753,-.06635,-.093043,-.116369,-.022197,1.971408,.154552,-.065139,-.170434,.034073,.100768,.121801,.029611,-.071064,.054048,.024982,-.043503,1.533519,.206817,-.137329,.200267,-.009421,.230484,-.094134,-.182553,-.076892,-.049555,.073302,.066048,2.029333,-.158923,-.113553,.040568,.177715,-.099256,-.955496,.046985,-.138052,-.213207,.039411,-.062235,-.044038,.030557,.090839,1.966856,-.031079,-1.16765,.021194,.024693,.160223,.076474,-.069384,1.633191,-.1255,.046214,.151981,.040755,.196619,.078839,-.054103,.07727,-.053317,.080602,-.024293,.029106,.135026,.021742,2.102491,.17412,1.407219,.59148,.080059,-.423349,.169065,.013025,-.230041,.022523,.161604,.098566,.016472,-.005956,-.10389,-2.27572,2.081612,.065006,-.480911,.185327];
+export function baselineNetwork(){return BASELINE_NETWORK.slice();}
+export function randomGenes(rng=Math.random){const base=baselineNetwork();return base.map(v=>v+(rng()+rng()+rng()+rng()-2)*.18);}
+export function normalizeGenes(_track,genes){
+ if(Array.isArray(genes)&&genes.length===NN_WEIGHTS&&genes.every(Number.isFinite))return genes.slice();
+ // Version 1.3 populations used short hand-tuned parameter arrays. Migrating
+ // them to the neural baseline preserves tracks while starting valid networks.
+ return baselineNetwork();
+}
+export function runNetwork(weights,inputs){
+ if(weights.length!==NN_WEIGHTS||inputs.length!==NN_INPUTS)throw Error('Invalid neural-network shape.');
+ const hidden=[],hiddenStride=NN_INPUTS+1,outputStart=NN_HIDDEN*hiddenStride,outputStride=NN_HIDDEN+1;
+ for(let unit=0;unit<NN_HIDDEN;unit++){
+  let sum=weights[unit*hiddenStride+NN_INPUTS];
+  for(let input=0;input<NN_INPUTS;input++)sum+=weights[unit*hiddenStride+input]*inputs[input];
+  hidden.push(Math.tanh(sum));
+ }
+ return Array.from({length:NN_OUTPUTS},(_,unit)=>{
+  const start=outputStart+unit*outputStride;let sum=weights[start+NN_HIDDEN];
+  for(let input=0;input<NN_HIDDEN;input++)sum+=weights[start+input]*hidden[input];
+  return Math.tanh(sum);
+ });
+}
 function roadClear(track,a,b,margin=4){
 	const distance=Math.hypot(b[0]-a[0],b[1]-a[1]),steps=Math.max(1,Math.ceil(distance/4));
 	for(let i=0;i<=steps;i++){
@@ -149,83 +168,29 @@ points=rounded(shortcuts(points,track),track).filter((p,i,a)=>!i||Math.hypot(p[0
 const guide=makeTrack(points);const arcs=[];for(const corner of guide.corners){if(Math.abs(corner.bend)<.6)continue;const prev=guide.segments.filter(seg=>seg.start+seg.len<=corner.s).at(-1)||guide.segments[0];const next=guide.segments.filter(seg=>seg.start>=corner.s).at(0)||guide.segments.at(-1);const start=Math.max(0,corner.s-(prev?.len||0)*.35);const end=Math.min(guide.length,corner.s+(next?.len||0)*.35);const arc={...corner,start,end,radius:clamp(18/Math.tan(corner.bend/2),8,180)};const last=arcs.at(-1);if(last&&Math.abs(start-last.end)<60&&Math.sign(corner.direction)===Math.sign(last.direction)){last.end=end;last.radius=Math.max(last.radius,arc.radius);last.bend=Math.max(last.bend,arc.bend);continue;}arcs.push(arc);}guide.arcs=arcs;guide.source=points.map((_,i)=>track.length*i/(points.length-1));track.fastGuide=guide.length<track.length*.98?guide:null;return track.fastGuide;
 }
 function sourceProgress(guide,s){return guide.length?clamp(s/guide.length,0,1)*(guide.source?.at(-1)||guide.length):s;}
-function guideTarget(track,guide,genes,s){
- const p=at(guide,s);
- return{x:p.x,y:p.y};
-}
 export function spawn(track,genes,id=0){const p=at(track,0);return{id,guide:racingGuide(track),guideProgress:0,genes:normalizeGenes(track,genes),x:p.x,y:p.y,heading:p.heading,speed:0,steer:0,time:0,progress:0,sectorTimes:[],nextSector:1,alive:true,finished:false,trace:[[p.x,p.y,p.heading]],ticks:0};}
 export function finishCrossing(track,from,to,progress){const end=track.segments.at(-1),dx=(end.b[0]-end.a[0])/end.len,dy=(end.b[1]-end.a[1])/end.len;const before=(from.x-end.b[0])*dx+(from.y-end.b[1])*dy,after=(to.x-end.b[0])*dx+(to.y-end.b[1])*dy;if(before>0||after<0||after<=before||progress<end.start)return null;const fraction=-before/(after-before),x=from.x+(to.x-from.x)*fraction,y=from.y+(to.y-from.y)*fraction,lateral=-(x-end.b[0])*dy+(y-end.b[1])*dx;return Math.abs(lateral)<=TRACK_LIMIT?{fraction,x,y}:null;}
-// Drive with a sane target speed on the actual track, and use the guide route only as a soft steering aid.
+export function neuralInputs(a,t,speedLimit=MAX_SPEED){
+ const route=a.guide||t,progress=a.guide?a.guideProgress:a.progress;
+ const bearingError=distance=>{const target=at(route,Math.min(route.length,progress+distance));return angle(Math.atan2(target.y-a.y,target.x-a.x)-a.heading)/Math.PI;};
+ const reference=at(route,progress),lateral=(-(a.x-reference.x)*Math.sin(reference.heading)+(a.y-reference.y)*Math.cos(reference.heading))/TRACK_LIMIT;
+ const nextCorner=route.corners.find(corner=>corner.s>=progress);
+ let signedBend=0,proximity=0,targetSpeedRatio=1;
+ if(nextCorner){
+  const distance=Math.max(0,nextCorner.s-progress),radius=nextCorner.radius??clamp(18/Math.tan(Math.abs(nextCorner.bend)/2),12,220);
+  let cornerSpeed=Math.sqrt(LATERAL_GRIP*radius)*(0.72+Math.max(0,1.4-Math.abs(nextCorner.bend))*.18);
+  if(Math.abs(nextCorner.bend)>2.4)cornerSpeed*=.65;
+  const rawTarget=clamp(cornerSpeed/speedLimit,.15,1),brakingDistance=Math.max(0,(a.speed*a.speed-cornerSpeed*cornerSpeed)/(2*BRAKING));
+  proximity=clamp(1-distance/Math.max(45,brakingDistance+70),0,1);
+  targetSpeedRatio=1+(rawTarget-1)*proximity;signedBend=nextCorner.direction*nextCorner.bend/Math.PI;
+ }
+ const near=bearingError(clamp(16+a.speed*.045,16,30));
+ return[near,bearingError(clamp(34+a.speed*.1,34,64)),bearingError(clamp(70+a.speed*.2,70,125)),clamp(lateral,-1.5,1.5),clamp(a.speed/speedLimit,0,1.5),clamp((a.steer||0)/MAX_STEER,-1,1),signedBend,proximity,targetSpeedRatio,Math.abs(near)];
+}
+// Every autonomous steering and throttle command comes from the neural policy.
 export function aiControls(a,t,speedLimit=MAX_SPEED){
-const [look,gain,pace,brake]=a.genes;
-const route=a.guide||t,progress=a.guide?a.guideProgress:a.progress;
-const lookAhead=clamp(16+look*.18+a.speed*.12,16,70);
-const pathTarget=at(route,progress+lookAhead);
-let target={x:pathTarget.x,y:pathTarget.y};
-for(const corner of route.corners){
-const delta=corner.s-progress;
-if(delta<10||delta>160)continue;
-const weight=clamp((160-delta)/160,0,1);
-	// Reduce lane bias at higher speeds to avoid aggressive apexing that causes overshoot.
-	let laneBias=(8+Math.abs(corner.bend)*12)*weight;
-	laneBias *= clamp(1 - a.speed/250, 0.45, 1);
-	laneBias *= clamp(1.05-brake*.08,.85,1.05);
-const normalX=-Math.sin(pathTarget.heading),normalY=Math.cos(pathTarget.heading);
-target={x:pathTarget.x+normalX*corner.direction*laneBias,y:pathTarget.y+normalY*corner.direction*laneBias};
-break;
-}
-if(a.guide)target=guideTarget(t,a.guide,a.genes,Math.min(a.guideProgress+lookAhead,a.guide.length));
-const dx=target.x-a.x,dy=target.y-a.y,distance=Math.max(6,Math.hypot(dx,dy));
-const error=angle(Math.atan2(dy,dx)-a.heading);
-const speedBoost=1;
-const steering=Math.abs(error)>Math.PI/2?Math.sign(error)*MAX_STEER:
-Math.atan(2*WHEELBASE*Math.sin(error)/distance)*clamp((1.05+gain*.12)*speedBoost,1.0,2.2);
-let desired=speedLimit*clamp(.25+pace*.75,.35,1);
-const caution=clamp(1.18-brake*.22,.5,1.2);
-for(const corner of route.corners){
-	if(corner.s<progress)continue;
-	const radius=corner.radius??clamp(18/Math.tan(Math.abs(corner.bend)/2),12,220);
-	let cornerSpeed=Math.sqrt(LATERAL_GRIP*radius*caution)*(0.72+Math.max(0,1.4-Math.abs(corner.bend))*0.18);
-	// Let evolution choose between a cautious apex and carrying momentum through a wider line.
-	const momentumBias=clamp(1.12-brake*.14,.78,1.12);
-	cornerSpeed*=momentumBias;
-	// Sharp corners need a lower apex speed, but not an immediate half-speed penalty.
-	if(Math.abs(corner.bend)>2.4) cornerSpeed*=.65;
-	const distanceToCorner=Math.max(0,corner.s-progress);
-	const brakingDistance=Math.max(0,(a.speed*a.speed-cornerSpeed*cornerSpeed)/(2*BRAKING));
-	const brakeWindow=brakingDistance+Math.max(Math.abs(corner.bend)>2.4?42:28,a.speed*(Math.abs(corner.bend)>2.4?.5:.35));
-	const urgency=clamp(1-distanceToCorner/Math.max(1,brakeWindow),0,1);
-	// Hold top speed until braking is physically needed, then blend smoothly to apex speed.
-	desired=Math.min(desired,speedLimit+(cornerSpeed-speedLimit)*urgency);
-}
-const headingPenalty=clamp(Math.abs(error)/1.2,0,1);
-desired=Math.min(desired,speedLimit*(1-headingPenalty*.48));
-// Test the normal target and one faster momentum target before committing.
-// Low-brake agents get a larger opportunity to carry speed, but only when legal.
-{
-	const simTurn=clamp(steering/MAX_STEER,-1,1);
-	const momentumFactor=clamp(1.08+(1-brake)*.04,.98,1.12);
-	const predictSafe=targetSpeed=>{
-		let simSpeed=a.speed,simX=a.x,simY=a.y,simHeading=a.heading,simSteer=a.steer||0;
-		const simThrottleBase=clamp((targetSpeed-simSpeed)/55,-1,1);
-		for(let i=0;i<12;i++){
-			simSpeed=clamp(simSpeed+simThrottleBase*(simThrottleBase>0?ACCELERATION:BRAKING)*DT-2*DT,0,Math.max(speedLimit,1));
-			const desiredSteerSim=simTurn*MAX_STEER;
-			const steerRateSim=STEER_RATE*(1+clamp(simSpeed/170,0,1.25)*0.5);
-			simSteer+=clamp(desiredSteerSim-simSteer,-steerRateSim*DT,steerRateSim*DT);
-			const yawSim=simSpeed/WHEELBASE*Math.tan(simSteer),maxYawSim=LATERAL_GRIP/Math.max(simSpeed,1);
-			simHeading=angle(simHeading+clamp(yawSim,-maxYawSim,maxYawSim)*DT);
-			simX+=Math.cos(simHeading)*simSpeed*DT;simY+=Math.sin(simHeading)*simSpeed*DT;
-			if(nearest(t,simX,simY).distance>TRACK_LIMIT)return false;
-		}
-		return true;
-	};
-	const baseSafe=predictSafe(desired);
-	if(baseSafe&&predictSafe(Math.min(speedLimit,desired*momentumFactor)))desired=Math.min(speedLimit,desired*momentumFactor);
-	else if(!baseSafe)desired*=.5;
-}
-const delta=desired-a.speed;
-return{turn:clamp(steering/MAX_STEER,-1,1),throttle:clamp(delta/40,-1,1)};
+ const [turn,throttle]=runNetwork(a.genes,neuralInputs(a,t,speedLimit));
+ return{turn,throttle};
 }
 export function step(a,t,manual,speedLimit=MAX_SPEED){if(!a.alive)return;speedLimit=Number.isFinite(speedLimit)?clamp(speedLimit,25,300):MAX_SPEED;a.speedMin=a.time===0?speedLimit:Math.min(a.speedMin??MAX_SPEED,speedLimit);a.speedMax=a.time===0?speedLimit:Math.max(a.speedMax??MAX_SPEED,speedLimit);
 const {turn,throttle}=manual||aiControls(a,t,speedLimit);
@@ -288,5 +253,5 @@ const crossing=t.openArea?null:finishCrossing(t,previous,a,a.progress);if(crossi
 if(a.ticks%3===0)a.trace.push([a.x,a.y,a.heading]);if(!t.openArea&&n.distance>TRACK_LIMIT){a.alive=false;a.stopReason='off-track';}else if(!t.openArea&&a.time>t.length/20+15){a.alive=false;a.stopReason='timeout';}}
 
 export const fitness=(a,t)=>a.finished?2+t.length/(MAX_SPEED*Math.max(a.time,.01)):a.progress/t.length;
-export function breed(agents,t,rng=Math.random){const ranked=[...agents].sort((a,b)=>fitness(b,t)-fitness(a,t));const bounds=[[12,150],[.3,7],[.2,1],[0,2.5],[-22,22]],scales=[14,.55,.12,.25,4];return Array.from({length:POP},(_,i)=>{if(i<3)return spawn(t,ranked[i].genes,i);if(i>=45)return spawn(t,randomGenes(rng,t),i);const p=ranked[Math.floor(rng()*12)].genes,q=ranked[Math.floor(rng()*12)].genes;const chosenCorner=Math.floor(rng()*Math.max(1,(p.length-5)/3)),tuneControls=rng()<.35;
-const genes=p.map((v,k)=>{if(k<5)return tuneControls?clamp(v+(rng()-.5)*2*scales[k],...bounds[k]):v;const corner=Math.floor((k-5)/3);if(corner!==chosenCorner)return v;const inherited=rng()<.15?q[k]:v;return clamp(inherited+(rng()-.5)*(rng()<.5?5:14),-24,24);});return spawn(t,genes,i);});}
+export function breed(agents,t,rng=Math.random){const ranked=[...agents].sort((a,b)=>fitness(b,t)-fitness(a,t));return Array.from({length:POP},(_,i)=>{if(i<3)return spawn(t,ranked[i].genes,i);if(i>=45)return spawn(t,randomGenes(rng),i);const p=ranked[Math.floor(rng()*12)].genes,q=ranked[Math.floor(rng()*12)].genes;
+const genes=p.map((value,k)=>{let next=rng()<.35?q[k]:value;if(rng()<.12)next+=(rng()+rng()+rng()+rng()-2)*.3;return clamp(next,-6,6);});return spawn(t,genes,i);});}
