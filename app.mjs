@@ -1,4 +1,4 @@
-import{ENGINE_VERSION,DT,POP,NN_WEIGHTS,WIDTH,TRACK_LIMIT,DEFAULT_TRACK,STRAIGHT,makeTrack,at,spawn,step,breed,randomGenes,angle,clamp}from'./engine.mjs?v=1.4';
+import{ENGINE_VERSION,DT,POP,NN_WEIGHTS,WIDTH,TRACK_LIMIT,DEFAULT_TRACK,STRAIGHT,makeTrack,at,spawn,step,breed,randomGenes,angle,clamp}from'./engine.mjs?v=1.5';
 const $=id=>document.getElementById(id),canvas=$('race'),ctx=canvas.getContext('2d'),colors=['#c7fa64','#67c4ff','#f5a36d','#c294ff','#ff718c'];
 const versionLabel=document.createElement('span');versionLabel.className='version-label';versionLabel.textContent='v'+ENGINE_VERSION;document.querySelector('footer').append(versionLabel);
 const sectorComparison=document.createElement('span');sectorComparison.className='sector-comparison';sectorComparison.hidden=true;document.querySelector('.track-footer').append(sectorComparison);
